@@ -86,6 +86,7 @@ struct file_output_stream_options {
     unsigned preallocation_size = 1024*1024; // 1MB
     unsigned write_behind = 1; ///< Number of buffers to write in parallel
     ::seastar::io_priority_class io_priority_class = default_priority_class();
+    bool flush_on_close = true;
 };
 
 // Create an output_stream for writing starting at the position zero of a

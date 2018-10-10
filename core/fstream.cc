@@ -417,6 +417,12 @@ public:
             _write_behind_sem.signal(_options.write_behind);
         });
     }
+    inline future<> flush_on_close() {
+        if (_options.flush_on_close) {
+            return _file.flush();
+        }
+        return make_ready_future<>();
+    }
 public:
     virtual future<> flush() override {
         return wait().then([this] {
@@ -425,7 +431,9 @@ public:
     }
     virtual future<> close() noexcept {
         return wait().finally([this] {
-            return _file.close();
+            return flush_on_close().then([this] {
+                return _file.close();
+            });
         });
     }
 };
