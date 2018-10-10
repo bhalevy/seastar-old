@@ -41,6 +41,7 @@ using namespace seastar;
 struct writer {
     output_stream<char> out;
     writer(file f) : out(make_file_output_stream(std::move(f))) {}
+    writer(file f, file_output_stream_options opts) : out(make_file_output_stream(std::move(f), opts)) {}
 };
 
 struct reader {
@@ -49,12 +50,12 @@ struct reader {
     reader(file f, file_input_stream_options options) : in(make_file_input_stream(std::move(f), std::move(options))) {}
 };
 
-SEASTAR_TEST_CASE(test_fstream) {
+future<> test_basic_fstream_io(compat::optional<file_output_stream_options> opts = {}) {
     auto sem = make_lw_shared<semaphore>(0);
 
         open_file_dma("testfile.tmp",
-                      open_flags::rw | open_flags::create | open_flags::truncate).then([sem] (file f) {
-            auto w = make_shared<writer>(std::move(f));
+                      open_flags::rw | open_flags::create | open_flags::truncate).then([sem, opts] (file f) {
+            auto w = opts ? make_shared<writer>(std::move(f), *opts) : make_shared<writer>(std::move(f));
             auto buf = static_cast<char*>(::malloc(4096));
             memset(buf, 0, 4096);
             buf[0] = '[';
@@ -102,6 +103,18 @@ SEASTAR_TEST_CASE(test_fstream) {
         });
 
     return sem->wait();
+}
+
+SEASTAR_TEST_CASE(test_fstream) {
+    return test_basic_fstream_io();
+}
+
+SEASTAR_TEST_CASE(test_flush_on_close) {
+    return test_basic_fstream_io(file_output_stream_options()).then([] {
+        auto opts = file_output_stream_options();
+        opts.flush_on_close = !opts.flush_on_close;
+        return test_basic_fstream_io(opts);
+    });
 }
 
 SEASTAR_TEST_CASE(test_consume_skip_bytes) {
