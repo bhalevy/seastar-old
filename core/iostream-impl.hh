@@ -462,6 +462,8 @@ output_stream<CharType>::poll_flush() {
 template <typename CharType>
 future<>
 output_stream<CharType>::close() {
+    // Close may wait until data is guaranteed to have been persisted to disk
+    // for data_sink_impl that supports persistent_flush (see make_file_output_stream).
     return flush().finally([this] {
         if (_in_batch) {
             return _in_batch.value().get_future();

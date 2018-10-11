@@ -419,6 +419,9 @@ public:
     }
 public:
     virtual future<> flush() override {
+        if (!_options.persistent_flush) {
+            return wait();
+        }
         return wait().then([this] {
             return _file.flush();
         });
@@ -437,9 +440,10 @@ public:
                 std::move(f), options)) {}
 };
 
-output_stream<char> make_file_output_stream(file f, size_t buffer_size) {
+output_stream<char> make_file_output_stream(file f, size_t buffer_size, bool persistent_flush) {
     file_output_stream_options options;
     options.buffer_size = buffer_size;
+    options.persistent_flush = persistent_flush;
     return make_file_output_stream(std::move(f), options);
 }
 

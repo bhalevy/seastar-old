@@ -86,6 +86,11 @@ struct file_output_stream_options {
     unsigned preallocation_size = 1024*1024; // 1MB
     unsigned write_behind = 1; ///< Number of buffers to write in parallel
     ::seastar::io_priority_class io_priority_class = default_priority_class();
+
+    // The persistent_flush flag ensures that flush() waits until the data is
+    // guaranteed to be safely written to the persistent storage and will be visible
+    // if a reboot occurs at this point.
+    bool persistent_flush = true; ///< Flush data to persistent storage
 };
 
 // Create an output_stream for writing starting at the position zero of a
@@ -93,7 +98,8 @@ struct file_output_stream_options {
 // NOTE: flush() should be the last thing to be called on a file output stream.
 output_stream<char> make_file_output_stream(
         file file,
-        uint64_t buffer_size = 8192);
+        uint64_t buffer_size = 8192,
+        bool persistent_flush = true);
 
 /// Create an output_stream for writing starting at the position zero of a
 /// newly created file.
