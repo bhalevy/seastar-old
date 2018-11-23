@@ -246,6 +246,13 @@ modes = {
         'opt': '-O2',
         'libs': '',
     },
+    'dev': {
+        'sanitize': '',
+        'sanitize_libs': '',
+        'opt': '-O1',
+        'libs': '',
+    },
+
 }
 
 perf_tests = [
@@ -785,6 +792,10 @@ warnings = [w
 warnings = ' '.join(warnings)
 
 dbgflag = debug_flag(args.cxx, flags=args.user_cflags.split()) if args.debuginfo else ''
+if dbgflag:
+    modes['debug']['opt'] += ' ' + dbgflag
+    modes['release']['opt'] += ' ' + dbgflag
+
 tests_link_rule = 'link' if args.tests_debuginfo else 'link_stripped'
 
 sanitize_flags = sanitize_vptr_flag(args.cxx, flags=args.user_cflags.split())
@@ -918,8 +929,8 @@ with open(buildfile, 'w') as f:
         full_builddir = {srcdir}/$builddir
         cxx = {cxx}
         # we disable _FORTIFY_SOURCE because it generates false positives with longjmp() (core/thread.cc)
-        cxxflags = -std={cpp_dialect} {dbgflag} {fpie} -Wall -Werror -Wno-error=deprecated-declarations -fvisibility=hidden {visibility_flags} -pthread -I{srcdir} -U_FORTIFY_SOURCE {user_cflags} {warnings} {defines}
-        ldflags = {dbgflag} -Wl,--no-as-needed {static} {pie} -fvisibility=hidden {visibility_flags} -pthread {user_ldflags}
+        cxxflags = -std={cpp_dialect} {fpie} -Wall -Werror -Wno-error=deprecated-declarations -fvisibility=hidden {visibility_flags} -pthread -I{srcdir} -U_FORTIFY_SOURCE {user_cflags} {warnings} {defines}
+        ldflags = -Wl,--no-as-needed {static} {pie} -fvisibility=hidden {visibility_flags} -pthread {user_ldflags}
         libs = {libs}
         pool link_pool
             depth = {link_pool_depth}
