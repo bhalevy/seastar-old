@@ -88,7 +88,7 @@ def make_build_path(mode, *suffixes):
     return os.path.join('build', mode, *suffixes)
 
 if __name__ == "__main__":
-    all_modes = ['debug', 'release']
+    all_modes = ['debug', 'release', 'dev']
 
     parser = argparse.ArgumentParser(description="Seastar test runner")
     parser.add_argument('--fast',  action="store_true", help="Run only fast tests")
@@ -184,6 +184,8 @@ if __name__ == "__main__":
            mode = 'release'
            if test[0].startswith(os.path.join('build','debug')):
               mode = 'debug'
+           if test[0].startswith(os.path.join('build','dev')):
+              mode = 'dev'
            xmlout = args.jenkins+"."+mode+"."+os.path.basename(test[0])+".boost.xml"
            path = path + " --output_format=XML --log_level=all --report_level=no --log_sink=" + xmlout
            print(path)
