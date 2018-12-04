@@ -128,6 +128,7 @@ struct mountpoint_params {
     uint64_t write_bytes_rate = std::numeric_limits<uint64_t>::max();
     uint64_t read_req_rate = std::numeric_limits<uint64_t>::max();
     uint64_t write_req_rate = std::numeric_limits<uint64_t>::max();
+    uint64_t num_io_queues = 0; // When 0, overridden by command line option or default (smp::count)
 };
 
 }
@@ -142,6 +143,9 @@ struct convert<seastar::mountpoint_params> {
         mp.read_req_rate = parse_memory_size(node["read_iops"].as<std::string>());
         mp.write_bytes_rate = parse_memory_size(node["write_bandwidth"].as<std::string>());
         mp.write_req_rate = parse_memory_size(node["write_iops"].as<std::string>());
+        if (node["num_io_queues"]) {
+            mp.num_io_queues = parse_memory_size(node["num_io_queues"].as<std::string>());
+        }
         return true;
     }
 };
@@ -4106,12 +4110,14 @@ public:
     std::unordered_map<dev_t, mountpoint_params> _mountpoints;
     std::chrono::duration<double> _latency_goal;
 
-    uint64_t per_io_queue(uint64_t qty) const {
-        return std::max(qty / _num_io_queues, 1ul);
+    uint64_t per_io_queue(uint64_t qty, dev_t devid = 0) const {
+        const mountpoint_params& p = _mountpoints.at(devid);
+        return std::max(qty / p.num_io_queues, 1ul);
     }
 public:
-    unsigned num_io_queues() const {
-        return _num_io_queues;
+    unsigned num_io_queues(dev_t devid = 0) const {
+        const mountpoint_params& p = _mountpoints.at(devid);
+        return p.num_io_queues;
     }
 
     void parse_config(boost::program_options::variables_map& configuration) {
@@ -4134,7 +4140,9 @@ public:
         }
 
         // Placeholder for unconfigured disks.
-        _mountpoints.emplace(0, mountpoint_params{});
+        mountpoint_params d = {};
+        d.num_io_queues = _num_io_queues;
+        _mountpoints.emplace(0, d);
         if (doc) {
             for (auto&& section : *doc) {
                 auto sec_name = section.first.as<std::string>();
@@ -4155,6 +4163,9 @@ public:
                         throw std::runtime_error(fmt::format("Configured number of queues {} is larger than the maximum {}",
                                                  _mountpoints.size(), reactor::max_queues));
                     }
+                    if (!d.num_io_queues) {
+                        d.num_io_queues = _num_io_queues;
+                    }
                     _mountpoints.emplace(buf.st_dev, d);
                 }
             }
@@ -4172,10 +4183,10 @@ public:
             cfg.disk_bytes_write_to_read_multiplier = (io_queue::read_request_base_count * p.read_bytes_rate) / p.write_bytes_rate;
             cfg.disk_req_write_to_read_multiplier = (io_queue::read_request_base_count * p.read_req_rate) / p.write_req_rate;
             if (max_bandwidth != std::numeric_limits<uint64_t>::max()) {
-                cfg.max_bytes_count = io_queue::read_request_base_count * per_io_queue(max_bandwidth * _latency_goal.count());
+                cfg.max_bytes_count = io_queue::read_request_base_count * per_io_queue(max_bandwidth * _latency_goal.count(), devid);
             }
             if (max_iops != std::numeric_limits<uint64_t>::max()) {
-                cfg.max_req_count = io_queue::read_request_base_count * per_io_queue(max_iops * _latency_goal.count());
+                cfg.max_req_count = io_queue::read_request_base_count * per_io_queue(max_iops * _latency_goal.count(), devid);
             }
             cfg.mountpoint = p.mountpoint;
         } else {

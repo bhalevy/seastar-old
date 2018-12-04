@@ -22,6 +22,13 @@ optional):
 Those quantities can be specified in raw form, or followed with a
 suffix (k, M, G, or T).
 
+In addition, the number of I/O queues may be specified for the device:
+
+* `num_io_queues`: number of I/O queues for the device
+
+Each I/O queue will be responsible for a fraction of the IO requests.
+Defaults to the number of threads.
+
 Example:
 
 ```
@@ -31,4 +38,5 @@ disks:
     read_bandwidth: 545M
     write_iops: 85000
     write_bandwidth: 510M
+    num_io_queues: 8
 ```
