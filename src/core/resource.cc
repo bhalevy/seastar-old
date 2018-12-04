@@ -239,7 +239,7 @@ allocate_io_queues(hwloc_topology_t& topology, std::vector<cpu> cpus, unsigned n
 
 
     auto available_nodes = boost::copy_range<std::vector<unsigned>>(node_coordinators | boost::adaptors::map_keys);
-    unsigned last_node_idx = 0;
+    static unsigned last_node_idx = 0;
 
     // If there are more processors than coordinators, we will have to assign them to existing
     // coordinators. We prefer do that within the same NUMA node, but if not possible we assign
@@ -352,7 +352,11 @@ resources allocate(configuration c) {
         ret.cpus.push_back(std::move(this_cpu));
     }
 
-    ret.ioq_topology = allocate_io_queues(topology, ret.cpus, c.num_io_queues.value_or(ret.cpus.size()));
+    for (auto d : c.num_io_queues) {
+        auto devid = d.first;
+        auto num_io_queues = d.second;
+        ret.ioq_topology.emplace(devid, allocate_io_queues(topology, ret.cpus, num_io_queues));
+    }
     return ret;
 }
 
@@ -406,7 +410,7 @@ resources allocate(configuration c) {
         ret.cpus.push_back(cpu{i, {{mem / procs, 0}}});
     }
 
-    ret.ioq_topology = allocate_io_queues(c, ret.cpus);
+    ret.ioq_topology.emplace_back(0, allocate_io_queues(c, ret.cpus));
     return ret;
 }
 
