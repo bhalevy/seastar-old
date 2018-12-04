@@ -59,6 +59,7 @@ struct memory {
 struct io_queue_topology {
     std::vector<unsigned> shard_to_coordinator;
     std::vector<unsigned> coordinators;
+    std::vector<int> coordinator_to_idx;
 };
 
 struct cpu {
