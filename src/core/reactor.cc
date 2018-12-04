@@ -4107,12 +4107,12 @@ public:
     std::unordered_map<dev_t, mountpoint_params> _mountpoints;
     std::chrono::duration<double> _latency_goal;
 
-    uint64_t per_io_queue(uint64_t qty, dev_t devid = 0) const {
+    uint64_t per_io_queue(uint64_t qty, dev_t devid) const {
         const mountpoint_params& p = _mountpoints.at(devid);
         return std::max(qty / p.num_io_queues, 1ul);
     }
 public:
-    unsigned num_io_queues(dev_t devid = 0) const {
+    unsigned num_io_queues(dev_t devid) const {
         const mountpoint_params& p = _mountpoints.at(devid);
         return p.num_io_queues;
     }
@@ -4226,7 +4226,7 @@ public:
             }
             cfg.mountpoint = p.mountpoint;
         } else {
-            cfg.capacity = per_io_queue(*_capacity);
+            cfg.capacity = per_io_queue(*_capacity, 0);
             cfg.disk_bytes_write_to_read_multiplier = 1;
             cfg.disk_req_write_to_read_multiplier = 1;
         }
@@ -4342,7 +4342,9 @@ void smp::configure(boost::program_options::variables_map configuration)
 
     disk_config_params disk_config;
     disk_config.parse_config(configuration);
-    rc.num_io_queues =  disk_config.num_io_queues();
+    for (auto& id : disk_config.device_ids()) {
+        rc.num_io_queues.emplace(id, disk_config.num_io_queues(id));
+    }
 
     auto resources = resource::allocate(rc);
     std::vector<resource::cpu> allocations = std::move(resources.cpus);
@@ -4374,16 +4376,18 @@ void smp::configure(boost::program_options::variables_map configuration)
     static boost::barrier smp_queues_constructed(smp::count);
     static boost::barrier inited(smp::count);
 
-    auto io_info = std::move(resources.ioq_topology);
+    auto ioq_topology = std::move(resources.ioq_topology);
 
     std::unordered_map<dev_t, std::vector<io_queue*>> all_io_queues;
     io_queue::fill_shares_array();
 
     for (auto& id : disk_config.device_ids()) {
+        auto io_info = ioq_topology.at(id);
         all_io_queues.emplace(id, io_info.coordinators.size());
     }
 
-    auto alloc_io_queue = [&io_info, &all_io_queues, &disk_config] (unsigned shard, dev_t id) {
+    auto alloc_io_queue = [&ioq_topology, &all_io_queues, &disk_config] (unsigned shard, dev_t id) {
+        auto io_info = ioq_topology.at(id);
         auto cid = io_info.shard_to_coordinator[shard];
         auto vec_idx = io_info.coordinator_to_idx[cid];
         assert(io_info.coordinator_to_idx_valid[cid]);
@@ -4397,7 +4401,8 @@ void smp::configure(boost::program_options::variables_map configuration)
         }
     };
 
-    auto assign_io_queue = [&io_info, &all_io_queues, &disk_config] (shard_id shard_id, dev_t dev_id) {
+    auto assign_io_queue = [&ioq_topology, &all_io_queues, &disk_config] (shard_id shard_id, dev_t dev_id) {
+        auto io_info = ioq_topology.at(dev_id);
         auto cid = io_info.shard_to_coordinator[shard_id];
         auto queue_idx = io_info.coordinator_to_idx[cid];
         if (all_io_queues[dev_id][queue_idx]->coordinator() == shard_id) {
