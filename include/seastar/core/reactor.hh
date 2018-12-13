@@ -540,6 +540,21 @@ inline open_flags operator&(open_flags a, open_flags b) {
     return open_flags(std::underlying_type_t<open_flags>(a) & std::underlying_type_t<open_flags>(b));
 }
 
+// Access flags for files/directories
+enum class access_flags {
+    exists = F_OK,
+    read = R_OK,
+    write = W_OK,
+    execute = X_OK,
+
+    // alias for directory access
+    lookup = execute,
+};
+
+inline access_flags operator|(access_flags a, access_flags b) {
+    return access_flags(std::underlying_type_t<access_flags>(a) | std::underlying_type_t<access_flags>(b));
+}
+
 class io_queue {
 private:
     struct priority_class_data {
@@ -649,6 +664,7 @@ class disk_config_params;
 
 class reactor {
     using sched_clock = std::chrono::steady_clock;
+    using path = compat::filesystem::path;
 private:
     struct pollfn {
         virtual ~pollfn() {}
@@ -985,6 +1001,10 @@ public:
     future<> touch_directory(sstring name);
     future<compat::optional<directory_entry_type>>  file_type(sstring name);
     future<uint64_t> file_size(sstring pathname);
+    future<bool> file_accessible(path path, access_flags flags);
+    future<bool> file_accessible(sstring pathname, access_flags flags) {
+        return file_accessible(path(pathname), flags);
+    }
     future<bool> file_exists(sstring pathname);
     future<fs_type> file_system_at(sstring pathname);
     future<struct statvfs> statvfs(sstring pathname);

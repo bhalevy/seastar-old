@@ -61,6 +61,7 @@ enum class transport;
 class file;
 class file_open_options;
 enum class open_flags;
+enum class access_flags;
 enum class fs_type;
 
 // Networking API
@@ -262,6 +263,12 @@ future<> rename_file(sstring old_name, sstring new_name);
 ///
 /// \param name name of the file to return the size
 future<uint64_t> file_size(sstring name);
+
+/// Check file access.
+///
+/// \param name name of the file to check
+/// \param flags bit pattern containing type of access to check (read/write/execute or exists),
+future<bool> file_accessible(sstring name, access_flags flags);
 
 /// check if a file exists.
 ///

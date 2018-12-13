@@ -2165,6 +2165,38 @@ reactor::file_size(sstring pathname) {
 }
 
 future<bool>
+reactor::file_accessible(fs::path path, access_flags flags) {
+    return _thread_pool.submit<syscall_result<int>>([path, flags] {
+        auto native_flags = std::underlying_type_t<access_flags>(flags);
+        auto ret = ::access(path.native().c_str(), native_flags);
+        return wrap_syscall(ret);
+    }).then([this, path, flags] (syscall_result<int> sr) {
+        if (sr.result < 0) {
+            if (sr.error == ENOENT && flags == access_flags::exists) {
+                return make_ready_future<bool>(false);
+            }
+            // The requested access would be denied to the file, or search permission is denied
+            // for one of the directories in the path prefix of pathname.
+            if (sr.error == EACCES && flags != access_flags::exists) {
+                auto parent = std::move(path);
+                parent.remove_filename();
+                return _thread_pool.submit<syscall_result<int>>([parent] {
+                    auto ret = ::access(parent.native().c_str(), X_OK);
+                    return wrap_syscall(ret);
+                }).then([path] (syscall_result<int> psr) {
+                    psr.throw_fs_exception_if_error("lookup failed", path);
+                    // only last path component can't be accessed
+                    return make_ready_future<bool>(false);
+                });
+            }
+            sr.throw_fs_exception("access failed", path);
+        }
+
+        return make_ready_future<bool>(true);
+    });
+}
+
+future<bool>
 reactor::file_exists(sstring pathname) {
     return _thread_pool.submit<syscall_result_extra<struct stat>>([pathname] {
         struct stat st;
@@ -4839,6 +4871,10 @@ future<uint64_t> fs_free(sstring name) {
 
 future<uint64_t> file_size(sstring name) {
     return engine().file_size(name);
+}
+
+future<bool> file_accessible(sstring name, access_flags flags) {
+    return engine().file_accessible(name, flags);
 }
 
 future<bool> file_exists(sstring name) {
