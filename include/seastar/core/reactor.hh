@@ -1005,7 +1005,9 @@ public:
     future<bool> file_accessible(sstring pathname, access_flags flags) {
         return file_accessible(path(pathname), flags);
     }
-    future<bool> file_exists(sstring pathname);
+    future<bool> file_exists(sstring pathname) {
+        return file_accessible(path(pathname), access_flags::exists);
+    }
     future<fs_type> file_system_at(sstring pathname);
     future<struct statvfs> statvfs(sstring pathname);
     future<> remove_file(sstring pathname);
