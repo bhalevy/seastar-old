@@ -51,7 +51,6 @@
 #include <fcntl.h>
 #include <sys/eventfd.h>
 #include <boost/lexical_cast.hpp>
-#include <boost/filesystem.hpp>
 #include <boost/thread/barrier.hpp>
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
@@ -64,7 +63,6 @@
 #include <boost/range/adaptor/map.hpp>
 #include <boost/version.hpp>
 #include <atomic>
-#include <experimental/filesystem>
 #include <dirent.h>
 #include <linux/types.h> // for xfs, below
 #include <sys/ioctl.h>
@@ -191,7 +189,7 @@ void task_histogram_add_task(const task& t) {
 }
 
 using namespace std::chrono_literals;
-namespace fs = std::experimental::filesystem;
+namespace fs = seastar::compat::filesystem;
 
 using namespace net;
 
@@ -4862,7 +4860,7 @@ void reactor::add_high_priority_task(std::unique_ptr<task>&& t) {
 static
 bool
 virtualized() {
-    return boost::filesystem::exists("/sys/hypervisor/type");
+    return fs::exists("/sys/hypervisor/type");
 }
 
 std::chrono::nanoseconds

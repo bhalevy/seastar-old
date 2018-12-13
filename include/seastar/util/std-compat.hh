@@ -31,6 +31,8 @@
 #include <boost/variant.hpp>
 #endif
 
+#include <experimental/filesystem>
+
 namespace seastar {
 
 /// \cond internal
@@ -170,6 +172,8 @@ const U* get_if(const variant<Types...>* v) {
 #endif
 
 using string_view = basic_string_view<char>;
+
+namespace filesystem = std::experimental::filesystem;
 
 } // namespace compat
 
