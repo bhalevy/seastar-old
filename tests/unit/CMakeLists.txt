@@ -184,6 +184,9 @@ seastar_add_test (expiring_fifo
 seastar_add_test (fair_queue
   SOURCES fair_queue_test.cc)
 
+seastar_add_test (file_access
+  SOURCES file_access_test.cc)
+
 seastar_add_test (file_io
   SOURCES file_io_test.cc)
 
