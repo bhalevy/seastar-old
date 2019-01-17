@@ -703,6 +703,11 @@ if (lz4_HAVE_COMPRESS_DEFAULT)
     PUBLIC SEASTAR_HAVE_LZ4_COMPRESS_DEFAULT)
 endif ()
 
+if (StdFilesystem_USE_EXPERIMENTAL_FILESYSTEM)
+  target_compile_definitions (seastar
+    PUBLIC SEASTAR_USE_EXPERIMENTAL_FILESYSTEM)
+endif ()
+
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
   target_compile_definitions (seastar
     PUBLIC

@@ -1,6 +1,12 @@
+#if defined(StdFilesystem_CXXEXPERIMENTAL_LIBRARY)
 #include <experimental/filesystem>
+namespace filesystem = std::experimental::filesystem;
+#else
+#include <filesystem>
+namespace filesystem = std::filesystem;
+#endif
 
 int main() {
-    std::experimental::filesystem::path path("/root");
+    filesystem::path path("/root");
     (void)path;
 }

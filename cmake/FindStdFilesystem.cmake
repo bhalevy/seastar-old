@@ -48,6 +48,7 @@ else ()
 
     if (StdFilesystem_CXXEXPERIMENTAL_LIBRARY)
       set (StdFilesystem_LIBRARY_NAME c++experimental)
+      set (StdFilesystem_USE_EXPERIMENTAL_FILESYSTEM yes)
     endif ()
   endif ()
 
