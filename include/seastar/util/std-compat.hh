@@ -31,7 +31,7 @@
 #include <boost/variant.hpp>
 #endif
 
-#if __cplusplus >= 201703L  // C++17
+#ifndef SEASTAR_USE_EXPERIMENTAL_FILESYSTEM
 #include <filesystem>
 #else
 #include <experimental/filesystem>
@@ -175,7 +175,7 @@ const U* get_if(const variant<Types...>* v) {
 
 #endif
 
-#if __cplusplus >= 201703L
+#ifndef SEASTAR_USE_EXPERIMENTAL_FILESYSTEM
 namespace filesystem = std::filesystem;
 #else
 namespace filesystem = std::experimental::filesystem;

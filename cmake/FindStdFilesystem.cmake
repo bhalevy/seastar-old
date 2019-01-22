@@ -20,13 +20,38 @@
 # Copyright (C) 2018 Scylladb, Ltd.
 #
 
+include (FindPackageHandleStandardArgs)
+
 include (CheckCXXSourceCompiles)
+file (READ ${CMAKE_CURRENT_LIST_DIR}/code_tests/StdFilesystem_include_test.cc _stdfilesystem_include_test_code)
+
+macro (_stdfilesystem_include_check_compiles var)
+  set (libraries ${ARGN})
+  set (CMAKE_REQUIRED_LIBRARIES ${libraries})
+  set (CMAKE_REQUIRED_FLAGS -std=${Seastar_CXX_DIALECT})
+  check_cxx_source_compiles ("${_stdfilesystem_include_test_code}" ${var})
+endmacro ()
+
+_stdfilesystem_include_check_compiles (StdFilesystem_NO_INCLUDE_EXPERIMENTAL)
+if (StdFilesystem_NO_INCLUDE_EXPERIMENTAL)
+  set (StdFilesystem_test_INCLUDE_EXPERIMENTAL 0)
+else ()
+  _stdfilesystem_include_check_compiles (StdFilesystem_INCLUDE_EXPERIMENTAL)
+  if (StdFilesystem_INCLUDE_EXPERIMENTAL)
+    set (StdFilesystem_test_INCLUDE_EXPERIMENTAL 1)
+    set (StdFilesystem_EXPERIMENTAL yes)
+  else ()
+    find_package_handle_standard_args (StdFilesystem
+      REQUIRED_VARS StdFilesystem_test_INCLUDE_EXPERIMENTAL)
+  endif ()
+endif ()
+
 file (READ ${CMAKE_CURRENT_LIST_DIR}/code_tests/StdFilesystem_test.cc _stdfilesystem_test_code)
 
 macro (_stdfilesystem_check_compiles var)
   set (libraries ${ARGN})
   set (CMAKE_REQUIRED_LIBRARIES ${libraries})
-  set (CMAKE_REQUIRED_FLAGS -std=${Seastar_CXX_DIALECT})
+  set (CMAKE_REQUIRED_FLAGS "-std=${Seastar_CXX_DIALECT} -DINCLUDE_EXPERIMENTAL=${StdFilesystem_test_INCLUDE_EXPERIMENTAL}")
   check_cxx_source_compiles ("${_stdfilesystem_test_code}" ${var})
 endmacro ()
 
@@ -54,8 +79,6 @@ else ()
   if (StdFilesystem_LIBRARY_NAME)
     set (StdFilesystem_LIBRARIES -l${StdFilesystem_LIBRARY_NAME})
   endif ()
-
-  include (FindPackageHandleStandardArgs)
 
   find_package_handle_standard_args (StdFilesystem
     REQUIRED_VARS StdFilesystem_LIBRARY_NAME)
