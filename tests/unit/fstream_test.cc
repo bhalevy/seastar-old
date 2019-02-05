@@ -525,3 +525,59 @@ SEASTAR_TEST_CASE(test_fstream_slow_start) {
         read_while_file_at_full_speed(make_fstream(f));
     });
 }
+
+SEASTAR_TEST_CASE(test_input_stream_auto_close) {
+    return seastar::async([] {
+        // Create file
+        auto out_file = open_file_dma("testfile.tmp", open_flags::create | open_flags::truncate | open_flags::rw).get0();
+        size_t align = 4096;
+        size_t size = 4096;
+        auto buf = static_cast<char*>(aligned_alloc(align, size));
+        auto del = defer([&] { ::free(buf); });
+        memset(buf, 0, size);
+        out_file.dma_write(0, buf, size).get();
+        out_file.close().get();
+
+        // Open the file, make an input_stream with default options
+        // and close the input stream.
+        auto in_file0 = open_file_dma("testfile.tmp", open_flags::ro).get0();
+        file_input_stream_options def_options{};
+        input_stream<char> in0 = make_file_input_stream(in_file0, 0, size, def_options);
+        in0.close().get();
+
+        // Attempt reading from f
+        // Return the number of bytes read on success,
+        // or -1 on `Bad file descriptor` error (i.e. the file is closed).
+        // Re-throw exception otherwise.
+        auto safe_read = [&buf] (file in_file, size_t size) {
+            return in_file.dma_read(0, buf, size).then_wrapped([] (future<size_t> f) {
+                try {
+                    size_t count = std::get<0>(f.get());
+                    return count;
+                } catch (std::system_error& e) {
+                    if (e.code().value() == EBADF) {
+                        return static_cast<size_t>(-1);
+                    } else {
+                        BOOST_TEST_MESSAGE(format("Unexpected exception code {}", e.code().value()));
+                        throw;
+                    }
+                }
+            });
+        };
+
+        // Test that f was not automatically closed by attempting read
+        BOOST_CHECK_EQUAL(safe_read(in_file0, size).get0(), size);
+        in_file0.close().get();
+
+        // Open the file, make an input_stream with auto_close_file option
+        // and close the input stream.
+        auto in_file1 = open_file_dma("testfile.tmp", open_flags::ro).get0();
+        file_input_stream_options auto_close_options{};
+        auto_close_options.auto_close_file = true;
+        input_stream<char> in1 = make_file_input_stream(in_file1, 0, size, auto_close_options);
+        in1.close().get();
+
+        // Test that f was automatically closed by attempting read
+        BOOST_CHECK_EQUAL(safe_read(in_file1, size).get0(), static_cast<size_t>(-1));
+    });
+}
