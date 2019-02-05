@@ -45,9 +45,21 @@ struct writer {
 };
 
 struct reader {
+    file in_file;
     input_stream<char> in;
-    reader(file f) : in(make_file_input_stream(std::move(f))) {}
-    reader(file f, file_input_stream_options options) : in(make_file_input_stream(std::move(f), std::move(options))) {}
+    reader(file f)
+        : in_file(std::move(f))
+        , in(make_file_input_stream(in_file))
+    {}
+    reader(file f, file_input_stream_options options)
+        : in_file(std::move(f))
+        , in(make_file_input_stream(in_file, std::move(options)))
+    {}
+    future<> close() {
+        return in.close().then([this] () mutable {
+            return in_file.close();
+        });
+    }
 };
 
 SEASTAR_TEST_CASE(test_fstream) {
@@ -95,7 +107,7 @@ SEASTAR_TEST_CASE(test_fstream) {
                     BOOST_REQUIRE(p[4096] == '[' && p[4096 + 1] == 'B' && p[4096 + 8191] == ']');
                     return make_ready_future<>();
                 }).then([r] {
-                    return r->in.close();
+                    return r->close();
                 }).finally([r] {});
             }).finally([sem] () {
                 sem->signal();
@@ -169,7 +181,7 @@ SEASTAR_TEST_CASE(test_consume_skip_bytes) {
             }
         };
         r->in.consume(consumer{}).get();
-        r->in.close().get();
+        r->close().get();
     });
 }
 
@@ -194,7 +206,8 @@ SEASTAR_TEST_CASE(test_fstream_unaligned) {
                 return f.size().then([] (size_t size) {
                     // assert that file was indeed truncated to the amount of bytes written.
                     BOOST_REQUIRE(size == 40);
-                    return make_ready_future<>();
+                }).then([f = std::move(f)] () mutable {
+                    return f.close();
                 });
             });
         }).then([] {
@@ -206,7 +219,7 @@ SEASTAR_TEST_CASE(test_fstream_unaligned) {
                 BOOST_REQUIRE(p[0] == '[' && p[1] == 'A' && p[39] == ']');
                 return make_ready_future<>();
             }).then([r] {
-                return r->in.close();
+                return r->close();
             }).finally([r] {});
         }).finally([sem] () {
             sem->signal();
@@ -241,9 +254,11 @@ future<> test_consume_until_end(uint64_t size) {
                     BOOST_REQUIRE(std::equal(buf.begin(), buf.end(), expected.begin()));
                     return make_ready_future<input_stream<char>::unconsumed_remainder>(compat::nullopt);
                 };
-                return do_with(make_file_input_stream(f), std::move(consumer), [] (input_stream<char>& in, auto& consumer) {
+                return do_with(make_file_input_stream(f), std::move(consumer), std::move(f), [] (input_stream<char>& in, auto& consumer, file& f) {
                     return in.consume(consumer).then([&in] {
                         return in.close();
+                    }).then([&f] () mutable {
+                        return f.close();
                     });
                 });
             });
@@ -479,7 +494,7 @@ SEASTAR_TEST_CASE(test_fstream_slow_start) {
 
         };
 
-        auto make_fstream = [&] {
+        auto make_fstream = [&] (file f) {
             struct fstream_wrapper {
                 input_stream<char> s;
                 fstream_wrapper(fstream_wrapper&&) = default;
@@ -494,18 +509,19 @@ SEASTAR_TEST_CASE(test_fstream_slow_start) {
                     s.close().get();
                 }
             };
-            return fstream_wrapper{make_file_input_stream(file(mock_file), 0, file_size, options)};
+            return fstream_wrapper{make_file_input_stream(f, 0, file_size, options)};
         };
 
+        file f(mock_file);
         BOOST_TEST_MESSAGE("Reading file, no history, expectiong a slow start");
-        read_whole_file_with_slow_start(make_fstream());
+        read_whole_file_with_slow_start(make_fstream(f));
         BOOST_TEST_MESSAGE("Reading file again, everything good so far, read at full speed");
-        read_while_file_at_full_speed(make_fstream());
+        read_while_file_at_full_speed(make_fstream(f));
         BOOST_TEST_MESSAGE("Reading and skipping a lot");
-        read_and_skip_a_lot(make_fstream());
+        read_and_skip_a_lot(make_fstream(f));
         BOOST_TEST_MESSAGE("Reading file, bad history, we are back at slow start...");
-        read_whole_file_with_slow_start(make_fstream());
+        read_whole_file_with_slow_start(make_fstream(f));
         BOOST_TEST_MESSAGE("Reading file yet again, should've recovered by now");
-        read_while_file_at_full_speed(make_fstream());
+        read_while_file_at_full_speed(make_fstream(f));
     });
 }
