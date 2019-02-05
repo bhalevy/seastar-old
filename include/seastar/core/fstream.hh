@@ -53,6 +53,7 @@ class file_input_stream_history {
 struct file_input_stream_options {
     size_t buffer_size = 8192;    ///< I/O buffer size
     unsigned read_ahead = 0;      ///< Maximum number of extra read-ahead operations
+    bool auto_close_file = false; ///< Automatically close the file when the input_stream is closed
     ::seastar::io_priority_class io_priority_class = default_priority_class();
     lw_shared_ptr<file_input_stream_history> dynamic_adjustments = { }; ///< Input stream history, if null dynamic adjustments are disabled
 };
