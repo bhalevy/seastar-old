@@ -230,6 +230,9 @@ public:
             return std::move(_dropped_reads);
         });
     }
+    virtual bool is_closed() const override {
+        return _file.is_closed();
+    }
 private:
     void issue_read_aheads(unsigned additional = 0) {
         if (_done) {

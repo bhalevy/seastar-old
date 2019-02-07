@@ -96,7 +96,9 @@ SEASTAR_TEST_CASE(test_fstream) {
                     return make_ready_future<>();
                 }).then([r] {
                     return r->in.close();
-                }).finally([r] {});
+                }).finally([r] {
+                    BOOST_REQUIRE(r->in.is_closed());
+                });
             }).finally([sem] () {
                 sem->signal();
             });
@@ -170,6 +172,7 @@ SEASTAR_TEST_CASE(test_consume_skip_bytes) {
         };
         r->in.consume(consumer{}).get();
         r->in.close().get();
+        BOOST_REQUIRE(r->in.is_closed());
     });
 }
 
@@ -212,7 +215,9 @@ SEASTAR_TEST_CASE(test_fstream_unaligned) {
                 return make_ready_future<>();
             }).then([r] {
                 return r->in.close();
-            }).finally([r] {});
+            }).finally([r] {
+                BOOST_REQUIRE(r->in.is_closed());
+            });
         }).finally([sem] () {
             sem->signal();
         });
@@ -248,7 +253,9 @@ future<> test_consume_until_end(uint64_t size) {
                 };
                 return do_with(make_file_input_stream(f), std::move(consumer), [] (input_stream<char>& in, auto& consumer) {
                     return in.consume(consumer).then([&in] {
-                        return in.close();
+                        return in.close().then([&in] {
+                            BOOST_REQUIRE(in.is_closed());
+                        });
                     });
                 });
             });
@@ -499,6 +506,8 @@ SEASTAR_TEST_CASE(test_fstream_slow_start) {
                 }
                 ~fstream_wrapper() {
                     s.close().get();
+                    // test that mock_file is still opened
+                    BOOST_REQUIRE(!s.is_closed());
                 }
             };
             return fstream_wrapper{make_file_input_stream(file(mock_file), 0, file_size, options)};
