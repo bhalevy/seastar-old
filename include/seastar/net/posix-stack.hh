@@ -121,6 +121,7 @@ public:
     future<> put(packet p) override;
     future<> put(temporary_buffer<char> buf) override;
     future<> close() override;
+    bool is_closed() const override;
 };
 
 template <transport Transport>

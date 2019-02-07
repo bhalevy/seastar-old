@@ -90,12 +90,16 @@ public:
         return make_ready_future<>();
     }
     virtual future<> close() = 0;
+    virtual bool is_closed() const = 0;
 };
 
 class no_close_data_sink_impl : public data_sink_impl {
 public:
     virtual future<> close() override {
         return make_ready_future<>();
+    }
+    virtual bool is_closed() const override {
+        return false;
     }
 };
 
@@ -122,6 +126,7 @@ public:
         return _dsi->flush();
     }
     future<> close() { return _dsi->close(); }
+    bool is_closed() const { return _dsi->is_closed(); }
 };
 
 struct continue_consuming {};
@@ -323,6 +328,7 @@ public:
     future<> write(temporary_buffer<char_type>);
     future<> flush();
     future<> close();
+    bool is_closed() const;
 
     /// Detaches the underlying \c data_sink from the \c output_stream.
     ///
