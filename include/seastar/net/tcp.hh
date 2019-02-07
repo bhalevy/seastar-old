@@ -437,6 +437,7 @@ private:
         void connect();
         packet read();
         void close();
+        bool is_closed() const;
         void remove_from_tcbs() {
             auto id = connid{_local_ip, _foreign_ip, _local_port, _foreign_port};
             _tcp._tcbs.erase(id);
@@ -703,6 +704,7 @@ public:
         void shutdown_connect();
         void close_read();
         void close_write();
+        bool is_closed() const;
     };
     class listener {
         tcp& _tcp;
@@ -1827,6 +1829,11 @@ void tcp<InetTraits>::tcb::close() {
 }
 
 template <typename InetTraits>
+bool tcp<InetTraits>::tcb::is_closed() const {
+    return in_state(CLOSED);
+}
+
+template <typename InetTraits>
 bool tcp<InetTraits>::tcb::should_send_ack(uint16_t seg_len) {
     // We've received a TSO packet, do ack immediately
     if (seg_len > _rcv.mss) {
@@ -2100,6 +2107,11 @@ void tcp<InetTraits>::connection::close_read() {
 template <typename InetTraits>
 void tcp<InetTraits>::connection::close_write() {
     _tcb->close();
+}
+
+template <typename InetTraits>
+bool tcp<InetTraits>::connection::is_closed() const {
+    return _tcb->is_closed();
 }
 
 template <typename InetTraits>
