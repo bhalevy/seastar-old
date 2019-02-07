@@ -352,8 +352,8 @@ SEASTAR_TEST_CASE(test_input_stream_esp_around_eof) {
 SEASTAR_TEST_CASE(file_handle_test) {
     return seastar::async([] {
         auto f = open_file_dma("testfile.tmp", open_flags::create | open_flags::truncate | open_flags::rw).get0();
-        auto buf = static_cast<char*>(aligned_alloc(4096, 4096));
-        auto del = defer([&] { ::free(buf); });
+        auto temp_buf = temporary_buffer<char>::aligned(4096, 4096);
+        auto buf = temp_buf.get_write();
         for (unsigned i = 0; i < 4096; ++i) {
             buf[i] = i;
         }
@@ -362,8 +362,8 @@ SEASTAR_TEST_CASE(file_handle_test) {
         smp::invoke_on_all([fh = f.dup(), &bad] {
             return seastar::async([fh, &bad] {
                 auto f = fh.to_file();
-                auto buf = static_cast<char*>(aligned_alloc(4096, 4096));
-                auto del = defer([&] { ::free(buf); });
+                auto temp_buf = temporary_buffer<char>::aligned(4096, 4096);
+                auto buf = temp_buf.get_write();
                 f.dma_read(0, buf, 4096).get();
                 for (unsigned i = 0; i < 4096; ++i) {
                     bad[engine().cpu_id()] |= buf[i] != char(i);
@@ -545,8 +545,8 @@ SEASTAR_THREAD_TEST_CASE(test_file_input_stream_close) {
     auto out_file = open_file_dma("testfile.tmp", open_flags::create | open_flags::truncate | open_flags::rw).get0();
     size_t align = 4096;
     size_t size = 4096;
-    auto buf = static_cast<char*>(aligned_alloc(align, size));
-    auto del = defer([&] { ::free(buf); });
+    auto temp_buf = temporary_buffer<char>::aligned(align, size);
+    auto buf = temp_buf.get_write();
     memset(buf, 0, size);
     out_file.dma_write(0, buf, size).get();
     BOOST_REQUIRE(!out_file.is_closed());
