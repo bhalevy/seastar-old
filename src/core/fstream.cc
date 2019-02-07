@@ -226,6 +226,7 @@ public:
                 ignore_read_future(std::move(c._ready));
             }
             update_history_unused(dropped);
+            _dropped_reads = _dropped_reads.then([this] () mutable { return _file.close_if_last(); });
             return std::move(_dropped_reads);
         });
     }
