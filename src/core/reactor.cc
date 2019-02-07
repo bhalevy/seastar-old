@@ -2667,6 +2667,11 @@ append_challenged_posix_file_impl::close() noexcept {
     });
 }
 
+bool
+append_challenged_posix_file_impl::is_closed() const {
+    return posix_file_impl::is_closed();
+}
+
 // Some kernels can append to xfs filesystems, some cannot; determine
 // from kernel version.
 static
@@ -3197,6 +3202,11 @@ posix_file_impl::close() noexcept {
     return closed.then([] (syscall_result<int> sr) {
         sr.throw_if_error();
     });
+}
+
+bool
+posix_file_impl::is_closed() const {
+    return _fd == -1;
 }
 
 future<uint64_t>

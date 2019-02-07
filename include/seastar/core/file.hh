@@ -133,6 +133,7 @@ public:
     virtual future<> allocate(uint64_t position, uint64_t length) = 0;
     virtual future<uint64_t> size(void) = 0;
     virtual future<> close() = 0;
+    virtual bool is_closed() const = 0;
     virtual std::unique_ptr<file_handle_impl> dup();
     virtual subscription<directory_entry> list_directory(std::function<future<> (directory_entry de)> next) = 0;
     virtual future<temporary_buffer<uint8_t>> dma_read_bulk(uint64_t offset, size_t range_size, const io_priority_class& pc) = 0;
@@ -404,6 +405,11 @@ public:
             return make_ready_future<>();
         }
         return close();
+    }
+
+    /// Returns true if the file is closed, or false otherwise.
+    bool is_closed() const {
+        return _file_impl->is_closed();
     }
 
     /// Returns a directory listing, given that this file object is a directory.

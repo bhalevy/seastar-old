@@ -195,8 +195,11 @@ SEASTAR_TEST_CASE(test_fstream_unaligned) {
                     // assert that file was indeed truncated to the amount of bytes written.
                     BOOST_REQUIRE(size == 40);
                     return make_ready_future<>();
-                }).then([f = std::move(f)] () mutable {
+                }).then([f] () mutable {
                     return f.close();
+                }).then([f = std::move(f)] {
+                    BOOST_REQUIRE(f.is_closed());
+                    return make_ready_future<>();
                 });
             });
         }).then([] {
@@ -328,6 +331,7 @@ SEASTAR_TEST_CASE(test_input_stream_esp_around_eof) {
             BOOST_REQUIRE(std::equal(readback.begin(), readback.end(), data.begin() + std::min(start, flen)));
         }
         f.close().get();
+        BOOST_REQUIRE(f.is_closed());
     });
 }
 
@@ -354,6 +358,7 @@ SEASTAR_TEST_CASE(file_handle_test) {
         }).get();
         BOOST_REQUIRE(!boost::algorithm::any_of_equal(bad, 1u));
         f.close().get();
+        BOOST_REQUIRE(f.is_closed());
     });
 }
 
@@ -509,5 +514,11 @@ SEASTAR_TEST_CASE(test_fstream_slow_start) {
         read_whole_file_with_slow_start(make_fstream());
         BOOST_TEST_MESSAGE("Reading file yet again, should've recovered by now");
         read_while_file_at_full_speed(make_fstream());
+
+        // test that mock_file is still opened
+        BOOST_REQUIRE(!mock_file->is_closed());
+        // and finally close it
+        mock_file->close().get();
+        BOOST_REQUIRE(mock_file->is_closed());
     });
 }
