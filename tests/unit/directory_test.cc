@@ -37,6 +37,7 @@ int main(int ac, char** av) {
                 , _listing(_f.list_directory([this] (directory_entry de) { return report(de); })) {
         }
         future<> done() { return _listing.done(); }
+        future<> close() { return _f.close(); }
     private:
         future<> report(directory_entry de) {
             fmt::print("{}\n", de.name);
@@ -46,7 +47,9 @@ int main(int ac, char** av) {
     return app_template().run_deprecated(ac, av, [] {
         return engine().open_directory(".").then([] (file f) {
             auto l = make_lw_shared<lister>(std::move(f));
-            return l->done().then([l] {
+            return l->done().then([l] () mutable {
+                return l->close();
+            }).then([l] {
                 // ugly thing to keep *l alive
                 engine().exit(0);
             });
