@@ -288,7 +288,7 @@ class smp_message_queue {
         async_work_item(smp_message_queue& queue, smp_service_group ssg, Func&& func) : work_item(ssg), _queue(queue), _func(std::move(func)) {}
         virtual void process() override {
             try {
-              // FIXME: future is discarded
+              // Process future asynchronously and respond when done.
               (void)with_scheduling_group(this->sg, [this] {
                 return futurator::apply(this->_func).then_wrapped([this] (auto f) {
                     if (f.failed()) {
