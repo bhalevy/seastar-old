@@ -71,6 +71,7 @@
 #include <seastar/core/memory.hh>
 #include <seastar/core/thread_cputime_clock.hh>
 #include <boost/range/irange.hpp>
+#include <boost/range/adaptor/filtered.hpp>
 #include <seastar/core/timer.hh>
 #include <seastar/core/condition-variable.hh>
 #include <seastar/util/log.hh>
@@ -1017,6 +1018,23 @@ public:
         return parallel_for_each(all_cpus(), [&func] (unsigned id) {
             return smp::submit_to(id, Func(func));
         });
+    }
+    // Invokes func on all other shards.
+    // The returned future resolves when all async invocations finish.
+    // The func may return void or future<>.
+    // Each async invocation will work with a separate copy of func.
+    template<typename Func>
+    static future<> invoke_on_others(unsigned cpu_id, Func&& func) {
+        static_assert(std::is_same<future<>, typename futurize<std::result_of_t<Func()>>::type>::value, "bad Func signature");
+        if (cpu_id == 0) {
+            return parallel_for_each(boost::irange(1u, count), [&func] (unsigned id) {
+                return smp::submit_to(id, Func(func));
+            });
+        } else {
+            return parallel_for_each(all_cpus(), [cpu_id, &func] (unsigned id) {
+                return id != cpu_id ? smp::submit_to(id, Func(func)) : make_ready_future<>();
+            });
+        }
     }
 private:
     static void start_all_queues();
