@@ -1827,9 +1827,10 @@ void reactor::configure(boost::program_options::variables_map vm) {
     auto network_stack_ready = vm.count("network-stack")
         ? network_stack_registry::create(sstring(vm["network-stack"].as<std::string>()), vm)
         : network_stack_registry::create(vm);
-    // FIXME: future is discarded
     (void)network_stack_ready.then([this] (std::unique_ptr<network_stack> stack) {
         _network_stack_ready_promise.set_value(std::move(stack));
+    }).handle_exception([this] (std::exception_ptr eptr) {
+        _network_stack_ready_promise.set_exception(eptr);
     });
 
     _handle_sigint = !vm.count("no-handle-interrupt");
@@ -4338,6 +4339,9 @@ int reactor::run() {
         return smp::invoke_on_all([] {
             engine()._cpu_started.signal();
         });
+    }).handle_exception([] (std::exception_ptr eptr) {
+        seastar_logger.error("Failed to initialize network stack: {}. Aborting.", eptr);
+        engine().exit(1);
     });
 
     poller syscall_poller(std::make_unique<syscall_pollfn>(*this));
