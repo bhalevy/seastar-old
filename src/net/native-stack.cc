@@ -48,96 +48,6 @@ namespace net {
 
 using namespace seastar;
 
-void create_native_net_device(boost::program_options::variables_map opts) {
-
-    bool deprecated_config_used = true;
-
-    std::stringstream net_config;
-
-    if ( opts.count("net-config")) {
-        deprecated_config_used = false;
-        net_config << opts["net-config"].as<std::string>();             
-    }
-    if ( opts.count("net-config-file")) {
-        deprecated_config_used = false;
-        std::fstream fs(opts["net-config-file"].as<std::string>());
-        net_config << fs.rdbuf();
-    }
-
-    std::unique_ptr<device> dev;
-
-    if ( deprecated_config_used) {
-#ifdef SEASTAR_HAVE_DPDK
-        if ( opts.count("dpdk-pmd")) {
-             dev = create_dpdk_net_device(opts["dpdk-port-index"].as<unsigned>(), smp::count,
-                !(opts.count("lro") && opts["lro"].as<std::string>() == "off"),
-                !(opts.count("hw-fc") && opts["hw-fc"].as<std::string>() == "off"));   
-       } else 
-#endif  
-        dev = create_virtio_net_device(opts);
-    }
-    else {
-        auto device_configs = parse_config(net_config);
-
-        if ( device_configs.size() > 1) {
-            std::runtime_error("only one network interface is supported");
-        }
-
-        for ( auto&& device_config : device_configs) {
-            auto& hw_config = device_config.second.hw_cfg;   
-#ifdef SEASTAR_HAVE_DPDK
-            if ( hw_config.port_index || !hw_config.pci_address.empty() ) {
-	            dev = create_dpdk_net_device(hw_config);
-	        } else 
-#endif  
-            {
-                (void)hw_config;        
-                std::runtime_error("only DPDK supports new configuration format"); 
-            }
-        }
-    }
-
-    auto sem = std::make_shared<semaphore>(0);
-    std::shared_ptr<device> sdev(dev.release());
-    // set_local_queue on all shard in the background,
-    // signal when done.
-    // FIXME: handle exceptions
-    for (unsigned i = 0; i < smp::count; i++) {
-        (void)smp::submit_to(i, [opts, sdev] {
-            uint16_t qid = engine().cpu_id();
-            if (qid < sdev->hw_queues_count()) {
-                auto qp = sdev->init_local_queue(opts, qid);
-                std::map<unsigned, float> cpu_weights;
-                for (unsigned i = sdev->hw_queues_count() + qid % sdev->hw_queues_count(); i < smp::count; i+= sdev->hw_queues_count()) {
-                    cpu_weights[i] = 1;
-                }
-                cpu_weights[qid] = opts["hw-queue-weight"].as<float>();
-                qp->configure_proxies(cpu_weights);
-                sdev->set_local_queue(std::move(qp));
-            } else {
-                auto master = qid % sdev->hw_queues_count();
-                sdev->set_local_queue(create_proxy_net_device(master, sdev.get()));
-            }
-        }).then([sem] {
-            sem->signal();
-        });
-    }
-    // wait for all shards to set their local queue,
-    // then when link is ready, communicate the native_stack to the caller
-    // via `create_native_stack` (that sets the ready_promise value)
-    (void)sem->wait(smp::count).then([opts, sdev] {
-        // FIXME: future is discarded
-        (void)sdev->link_ready().then([opts, sdev] {
-            for (unsigned i = 0; i < smp::count; i++) {
-                // FIXME: future is discarded
-                (void)smp::submit_to(i, [opts, sdev] {
-                    create_native_stack(opts, sdev);
-                });
-            }
-        });
-    });
-}
-
 // native_network_stack
 class native_network_stack : public network_stack {
 public:
@@ -297,6 +207,96 @@ void arp_learn(ethernet_address l2, ipv4_address l3)
 
 void create_native_stack(boost::program_options::variables_map opts, std::shared_ptr<device> dev) {
     native_network_stack::ready_promise.set_value(std::unique_ptr<network_stack>(std::make_unique<native_network_stack>(opts, std::move(dev))));
+}
+
+void create_native_net_device(boost::program_options::variables_map opts) {
+
+    bool deprecated_config_used = true;
+
+    std::stringstream net_config;
+
+    if ( opts.count("net-config")) {
+        deprecated_config_used = false;
+        net_config << opts["net-config"].as<std::string>();             
+    }
+    if ( opts.count("net-config-file")) {
+        deprecated_config_used = false;
+        std::fstream fs(opts["net-config-file"].as<std::string>());
+        net_config << fs.rdbuf();
+    }
+
+    std::unique_ptr<device> dev;
+
+    if ( deprecated_config_used) {
+#ifdef SEASTAR_HAVE_DPDK
+        if ( opts.count("dpdk-pmd")) {
+             dev = create_dpdk_net_device(opts["dpdk-port-index"].as<unsigned>(), smp::count,
+                !(opts.count("lro") && opts["lro"].as<std::string>() == "off"),
+                !(opts.count("hw-fc") && opts["hw-fc"].as<std::string>() == "off"));   
+       } else 
+#endif  
+        dev = create_virtio_net_device(opts);
+    }
+    else {
+        auto device_configs = parse_config(net_config);
+
+        if ( device_configs.size() > 1) {
+            std::runtime_error("only one network interface is supported");
+        }
+
+        for ( auto&& device_config : device_configs) {
+            auto& hw_config = device_config.second.hw_cfg;   
+#ifdef SEASTAR_HAVE_DPDK
+            if ( hw_config.port_index || !hw_config.pci_address.empty() ) {
+                dev = create_dpdk_net_device(hw_config);
+            } else 
+#endif  
+            {
+                (void)hw_config;        
+                std::runtime_error("only DPDK supports new configuration format"); 
+            }
+        }
+    }
+
+    auto sem = std::make_shared<semaphore>(0);
+    std::shared_ptr<device> sdev(dev.release());
+    // set_local_queue on all shard in the background,
+    // signal when done.
+    // FIXME: handle exceptions
+    for (unsigned i = 0; i < smp::count; i++) {
+        (void)smp::submit_to(i, [opts, sdev] {
+            uint16_t qid = engine().cpu_id();
+            if (qid < sdev->hw_queues_count()) {
+                auto qp = sdev->init_local_queue(opts, qid);
+                std::map<unsigned, float> cpu_weights;
+                for (unsigned i = sdev->hw_queues_count() + qid % sdev->hw_queues_count(); i < smp::count; i+= sdev->hw_queues_count()) {
+                    cpu_weights[i] = 1;
+                }
+                cpu_weights[qid] = opts["hw-queue-weight"].as<float>();
+                qp->configure_proxies(cpu_weights);
+                sdev->set_local_queue(std::move(qp));
+            } else {
+                auto master = qid % sdev->hw_queues_count();
+                sdev->set_local_queue(create_proxy_net_device(master, sdev.get()));
+            }
+        }).then([sem] {
+            sem->signal();
+        });
+    }
+    // wait for all shards to set their local queue,
+    // then when link is ready, communicate the native_stack to the caller
+    // via `create_native_stack` (that sets the ready_promise value)
+    (void)sem->wait(smp::count).then([opts, sdev] {
+        // FIXME: future is discarded
+        (void)sdev->link_ready().then([opts, sdev] {
+            for (unsigned i = 0; i < smp::count; i++) {
+                // FIXME: future is discarded
+                (void)smp::submit_to(i, [opts, sdev] {
+                    create_native_stack(opts, sdev);
+                });
+            }
+        });
+    });
 }
 
 boost::program_options::options_description nns_options() {
