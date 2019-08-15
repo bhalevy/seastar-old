@@ -28,7 +28,6 @@ namespace seastar {
 
 namespace net {
 
-void create_native_stack(boost::program_options::variables_map opts, std::shared_ptr<device> dev);
 void register_native_stack();
 
 }

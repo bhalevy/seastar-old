@@ -206,8 +206,8 @@ void arp_learn(ethernet_address l2, ipv4_address l3)
     });
 }
 
-void create_native_stack(boost::program_options::variables_map opts, std::shared_ptr<device> dev) {
-    native_network_stack::ready_promise.set_value(std::unique_ptr<network_stack>(std::make_unique<native_network_stack>(opts, std::move(dev))));
+static std::unique_ptr<network_stack> create_native_stack(boost::program_options::variables_map opts, std::shared_ptr<device> dev) {
+    return std::unique_ptr<network_stack>(std::make_unique<native_network_stack>(opts, std::move(dev)));
 }
 
 void native_network_stack::create_native_net_device(boost::program_options::variables_map opts) {
@@ -293,7 +293,7 @@ void native_network_stack::create_native_net_device(boost::program_options::vari
             for (unsigned i = 0; i < smp::count; i++) {
                 // FIXME: future is discarded
                 (void)smp::submit_to(i, [opts, sdev] {
-                    create_native_stack(opts, sdev);
+                    ready_promise.set_value(create_native_stack(opts, sdev));
                 });
             }
         });
