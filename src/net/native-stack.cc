@@ -71,6 +71,7 @@ public:
     virtual ::seastar::socket socket() override;
     virtual udp_channel make_udp_channel(const socket_address& addr) override;
     virtual future<> initialize() override;
+    static void create_native_net_device(boost::program_options::variables_map opts);
     static future<std::unique_ptr<network_stack>> create(boost::program_options::variables_map opts) {
         if (engine().cpu_id() == 0) {
             create_native_net_device(opts);
@@ -209,7 +210,7 @@ void create_native_stack(boost::program_options::variables_map opts, std::shared
     native_network_stack::ready_promise.set_value(std::unique_ptr<network_stack>(std::make_unique<native_network_stack>(opts, std::move(dev))));
 }
 
-void create_native_net_device(boost::program_options::variables_map opts) {
+void native_network_stack::create_native_net_device(boost::program_options::variables_map opts) {
 
     bool deprecated_config_used = true;
 
