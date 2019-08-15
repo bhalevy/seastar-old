@@ -159,12 +159,10 @@ void native_network_stack::on_dhcp(compat::optional<dhcp::lease> lease, bool is_
     if (engine().cpu_id() == 0) {
         // And the other cpus, which, in the case of initial discovery,
         // will be waiting for us.
-        for (unsigned i = 1; i < smp::count; i++) {
-            (void)smp::submit_to(i, [lease, is_renew]() {
-                auto & ns = static_cast<native_network_stack&>(engine().net());
-                ns.on_dhcp(lease, is_renew);
-            });
-        }
+        (void)smp::invoke_on_others(0, [lease, is_renew]() {
+            auto & ns = static_cast<native_network_stack&>(engine().net());
+            ns.on_dhcp(lease, is_renew);
+        });
         if (lease) {
             // And set up to renew the lease later on.
             auto& res = *lease;
