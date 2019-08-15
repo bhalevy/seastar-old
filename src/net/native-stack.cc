@@ -51,6 +51,7 @@ using namespace seastar;
 // native_network_stack
 class native_network_stack : public network_stack {
 public:
+    static thread_local std::exception_ptr _exception;
     static thread_local promise<std::unique_ptr<network_stack>> ready_promise;
 private:
     interface _netif;
@@ -85,6 +86,7 @@ public:
     friend class native_server_socket_impl<tcp4>;
 };
 
+thread_local std::exception_ptr native_network_stack::_exception;
 thread_local promise<std::unique_ptr<network_stack>> native_network_stack::ready_promise;
 
 udp_channel
@@ -261,8 +263,9 @@ void native_network_stack::create_native_net_device(boost::program_options::vari
     // set_local_queue on all shard in the background,
     // then when link is ready, communicate the native_stack to the caller
     // via `create_native_stack` (that sets the ready_promise value)
-    // FIXME: handle exceptions
+    // FIXME: future is discarded (e.g. exception from sdev->link_ready() will not be handled)
     (void)smp::invoke_on_all([opts, sdev] {
+        try {
             uint16_t qid = engine().cpu_id();
             if (qid < sdev->hw_queues_count()) {
                 auto qp = sdev->init_local_queue(opts, qid);
@@ -277,12 +280,17 @@ void native_network_stack::create_native_net_device(boost::program_options::vari
                 auto master = qid % sdev->hw_queues_count();
                 sdev->set_local_queue(create_proxy_net_device(master, sdev.get()));
             }
+        } catch (...) {
+            _exception = std::current_exception();
+        }
     }).then([opts, sdev] {
-        // FIXME: future is discarded
-        (void)sdev->link_ready().then([opts, sdev] {
-            // FIXME: future is discarded
-            (void)smp::invoke_on_all([opts, sdev] {
+        return sdev->link_ready().then([opts, sdev] {
+            return smp::invoke_on_all([opts, sdev] {
+                if (!_exception) {
                     ready_promise.set_value(create_native_stack(opts, sdev));
+                } else {
+                    ready_promise.set_exception(_exception);
+                }
             });
         });
     });
