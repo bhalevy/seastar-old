@@ -257,13 +257,12 @@ void native_network_stack::create_native_net_device(boost::program_options::vari
         }
     }
 
-    auto sem = std::make_shared<semaphore>(0);
     std::shared_ptr<device> sdev(dev.release());
     // set_local_queue on all shard in the background,
-    // signal when done.
+    // then when link is ready, communicate the native_stack to the caller
+    // via `create_native_stack` (that sets the ready_promise value)
     // FIXME: handle exceptions
-    for (unsigned i = 0; i < smp::count; i++) {
-        (void)smp::submit_to(i, [opts, sdev] {
+    (void)smp::invoke_on_all([opts, sdev] {
             uint16_t qid = engine().cpu_id();
             if (qid < sdev->hw_queues_count()) {
                 auto qp = sdev->init_local_queue(opts, qid);
@@ -278,22 +277,13 @@ void native_network_stack::create_native_net_device(boost::program_options::vari
                 auto master = qid % sdev->hw_queues_count();
                 sdev->set_local_queue(create_proxy_net_device(master, sdev.get()));
             }
-        }).then([sem] {
-            sem->signal();
-        });
-    }
-    // wait for all shards to set their local queue,
-    // then when link is ready, communicate the native_stack to the caller
-    // via `create_native_stack` (that sets the ready_promise value)
-    (void)sem->wait(smp::count).then([opts, sdev] {
+    }).then([opts, sdev] {
         // FIXME: future is discarded
         (void)sdev->link_ready().then([opts, sdev] {
-            for (unsigned i = 0; i < smp::count; i++) {
-                // FIXME: future is discarded
-                (void)smp::submit_to(i, [opts, sdev] {
+            // FIXME: future is discarded
+            (void)smp::invoke_on_all([opts, sdev] {
                     ready_promise.set_value(create_native_stack(opts, sdev));
-                });
-            }
+            });
         });
     });
 }
